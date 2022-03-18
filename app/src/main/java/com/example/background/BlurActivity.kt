@@ -19,21 +19,33 @@ package com.example.background
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.LiveData
 import androidx.lifecycle.Observer
+import androidx.lifecycle.ViewModelProviders
 import androidx.work.WorkInfo
+import com.bumptech.glide.Glide
 import com.example.background.databinding.ActivityBlurBinding
 
 class BlurActivity : AppCompatActivity() {
 
-    private val viewModel: BlurViewModel by viewModels { BlurViewModelFactory(application) }
+    private lateinit var viewModel: BlurViewModel
     private lateinit var binding: ActivityBlurBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityBlurBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Get the ViewModel
+        viewModel = ViewModelProviders.of(this).get(BlurViewModel::class.java)
+
+        // Image uri should be stored in the ViewModel; put it there then display
+        val imageUriExtra = intent.getStringExtra(KEY_IMAGE_URI)
+        viewModel.setImageUri(imageUriExtra)
+        viewModel.imageUri?.let { imageUri ->
+            Glide.with(this).load(imageUri).into(binding.imageView)
+        }
 
         binding.goButton.setOnClickListener { viewModel.applyBlur(blurLevel) }
 
@@ -51,6 +63,8 @@ class BlurActivity : AppCompatActivity() {
         binding.cancelButton.setOnClickListener { viewModel.cancelWork() }
 
         viewModel.outputWorkInfos.observe(this, workInfosObserver())
+
+        viewModel.progressWorkInfos.observe(this,progressObserver())
     }
 
     private fun workInfosObserver(): Observer<List<WorkInfo>> {
@@ -87,6 +101,21 @@ class BlurActivity : AppCompatActivity() {
         }
     }
 
+    private fun progressObserver() : Observer<List<WorkInfo>> {
+        return Observer { listOfWorkInfo ->
+            if(listOfWorkInfo.isNullOrEmpty()){
+                return@Observer
+            }
+            listOfWorkInfo.forEach{
+                if(WorkInfo.State.RUNNING == it.state) {
+                    val progress = it.progress.getInt(PROGRESS,0)
+                    binding.progressBar.progress = progress
+                }
+            }
+
+        }
+    }
+
     /**
      * Shows and hides views for when the Activity is processing an image
      */
@@ -96,6 +125,7 @@ class BlurActivity : AppCompatActivity() {
             cancelButton.visibility = View.VISIBLE
             goButton.visibility = View.GONE
             seeFileButton.visibility = View.GONE
+            progressBar.progress = 0
         }
     }
 
